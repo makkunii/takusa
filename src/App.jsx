@@ -9,6 +9,7 @@ import HunaModal from './components/HunaModal';
 import MiyaModal from './components/MiyaModal';
 import NanaModal from './components/NanaModal';
 import MusicModal from './components/MusicModal';
+import PartnerMessageModal from './components/PartnerMessageModal'; // <-- Triggered upon collecting 5 hearts
 import VictoryModal from './components/VictoryModal';
 import TouchControls from './components/TouchControls';
 import './App.css';
@@ -37,9 +38,10 @@ export default function App() {
   const [showMiyaModal, setShowMiyaModal] = useState(false);
   const [showNanaModal, setShowNanaModal] = useState(false);
   const [showMusicModal, setShowMusicModal] = useState(false);
+  const [showPartnerMessageModal, setShowPartnerMessageModal] = useState(false); // <-- State for 5-heart message popup
 
   const modalOpenRef = useRef(false);
-  modalOpenRef.current = showCoffeeModal || showZakyModal || showHunaModal || showMiyaModal || showNanaModal || showMusicModal;
+  modalOpenRef.current = showCoffeeModal || showZakyModal || showHunaModal || showMiyaModal || showNanaModal || showMusicModal || showPartnerMessageModal;
 
   const charImagesRef = useRef({ makkunii: null, dang: null, zaky: null, huna: null, miya: null, nana: null, music: null });
 
@@ -58,14 +60,14 @@ export default function App() {
     zakyNpc: { x: 200, y: 180, size: 64 },
     hunaNpc: { x: 200, y: 390, size: 64 },
     miyaNpc: { x: 650, y: 500, size: 64 },
-    nanaNpc: { x: 850, y: 180, size: 64 }, // Safely moved into an upper open path area
+    nanaNpc: { x: 850, y: 180, size: 64 },
     musicSpot: { x: 350, y: 550, size: 88 }, 
     partner: { x: 950, y: 750, size: 100 }
   });
 
   useEffect(() => {
     let loadedCount = 0;
-    const totalAssets = 7; // makkunii, dang, zaky, huna, miya, nana, music
+    const totalAssets = 7;
     const checkAllLoaded = () => { if (++loadedCount === totalAssets) setAssetsLoaded(true); };
 
     const imgMakkunii = new Image(); imgMakkunii.src = makkuniiImgSrc; imgMakkunii.onload = checkAllLoaded;
@@ -133,6 +135,7 @@ export default function App() {
     setShowMiyaModal(false);
     setShowNanaModal(false);
     setShowMusicModal(false);
+    setShowPartnerMessageModal(false);
     setGameState('PLAYING');
   };
 
@@ -143,6 +146,7 @@ export default function App() {
     setShowMiyaModal(false);
     setShowNanaModal(false);
     setShowMusicModal(false);
+    setShowPartnerMessageModal(false);
     setGameState('START');
   };
 
@@ -267,7 +271,7 @@ export default function App() {
         if (Math.abs(p.x - g.nanaNpc.x) < 30 && Math.abs(p.y - g.nanaNpc.y) < 20) {
           audio.collect(); 
           setShowNanaModal(true); 
-          p.y = g.nanaNpc.y + 60; // Safely pushes the player down into the clear path area below her
+          p.y = g.nanaNpc.y + 60;
         }
 
         // Check Music Spot interaction
@@ -275,12 +279,26 @@ export default function App() {
           audio.collect(); setShowMusicModal(true); p.y += 100;
         }
 
+        // Note collection loop
         g.notes.forEach(note => {
           if (!note.taken && Math.abs(p.x - note.x) < 30 && Math.abs(p.y - note.y) < 30) {
-            note.taken = true; audio.collect(); setHearts(prev => prev + 1);
+            note.taken = true; 
+            audio.collect(); 
+            
+            setHearts(prev => {
+              const newTotal = prev + 1;
+              // Trigger personal message popup right when the 5th heart is collected
+              if (newTotal >= 5) {
+                audio.winFanfare();
+                confetti({ particleCount: 130, spread: 80, origin: { y: 0.6 } });
+                setShowPartnerMessageModal(true);
+              }
+              return newTotal;
+            });
           }
         });
 
+        // Trigger Partner / Victory condition
         if (Math.abs(p.x - g.partner.x) < 50 && Math.abs(p.y - g.partner.y) < 50) {
           audio.winFanfare();
           confetti({ particleCount: 130, spread: 80, origin: { y: 0.6 } });
@@ -516,6 +534,13 @@ export default function App() {
         {showMiyaModal && <MiyaModal onClose={() => setShowMiyaModal(false)} miyaImgSrc={miyaImgSrc} />}
         {showNanaModal && <NanaModal onClose={() => setShowNanaModal(false)} nanaImgSrc={nanaImgSrc} />}
         {showMusicModal && <MusicModal onClose={() => setShowMusicModal(false)} musicImgSrc={musicImgSrc} />}
+
+        {/* Message modal pops up immediately upon collecting all 5 hearts */}
+        {showPartnerMessageModal && (
+          <PartnerMessageModal 
+            onClose={() => setShowPartnerMessageModal(false)} 
+          />
+        )}
 
         {gameState === 'VICTORY' && (
           <VictoryModal playerChar={playerChar} hearts={hearts} startGame={startGame} goToCharSelect={goToCharSelect} coverImgSrc={coverImgSrc} />
