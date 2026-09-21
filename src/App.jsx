@@ -4,81 +4,57 @@ import { audio } from './utils/soundEngine';
 import HudBar from './components/HudBar';
 import StartScreen from './components/StartScreen';
 import CoffeeModal from './components/CoffeeModal';
+import VapeModal from './components/VapeModal';
 import ZakyModal from './components/ZakyModal';
 import HunaModal from './components/HunaModal';
 import MiyaModal from './components/MiyaModal';
 import NanaModal from './components/NanaModal';
 import MusicModal from './components/MusicModal';
-import PartnerMessageModal from './components/PartnerMessageModal'; // <-- Triggered upon collecting 5 hearts
+import PartnerMessageModal from './components/PartnerMessageModal'; 
 import VictoryModal from './components/VictoryModal';
 import TouchControls from './components/TouchControls';
 import './App.css';
 
-// Asset Imports with Character Folders & Items
-import makkuniiImgSrc from './assets/characters/makkunii/makkunii.png';
-import dangImgSrc from './assets/characters/dang/dang.png';
-import zakyImgSrc from './assets/characters/zaky/zaky.png';
-import hunaImgSrc from './assets/characters/huna/huna.png';
-import miyaImgSrc from './assets/characters/miya/miya.png';
-import nanaImgSrc from './assets/characters/nana/nana.png';
-import musicImgSrc from './assets/characters/music/music.png';
+import { ASSET_SOURCES, createInitialMapState } from './game/gameConfig';
 import coverImgSrc from './assets/cover-image.png';
 import coffeePhotoImgSrc from './assets/coffee-photo.png';
 
 export default function App() {
   const canvasRef = useRef(null);
-  const [gameState, setGameState] = useState('START');
+  const [gameState, setGameState] = useState('START'); // 'START' | 'PLAYING' | 'VICTORY'
   const [hearts, setHearts] = useState(0);
   const [muted, setMuted] = useState(false);
   const [playerChar, setPlayerChar] = useState('makkunii');
   const [assetsLoaded, setAssetsLoaded] = useState(false);
-  const [showCoffeeModal, setShowCoffeeModal] = useState(false);
-  const [showZakyModal, setShowZakyModal] = useState(false);
-  const [showHunaModal, setShowHunaModal] = useState(false);
-  const [showMiyaModal, setShowMiyaModal] = useState(false);
-  const [showNanaModal, setShowNanaModal] = useState(false);
-  const [showMusicModal, setShowMusicModal] = useState(false);
-  const [showPartnerMessageModal, setShowPartnerMessageModal] = useState(false); // <-- State for 5-heart message popup
-
+  
+  // Modal states
+  const [activeModal, setActiveModal] = useState(null);
   const modalOpenRef = useRef(false);
-  modalOpenRef.current = showCoffeeModal || showZakyModal || showHunaModal || showMiyaModal || showNanaModal || showMusicModal || showPartnerMessageModal;
+  modalOpenRef.current = activeModal !== null;
 
-  const charImagesRef = useRef({ makkunii: null, dang: null, zaky: null, huna: null, miya: null, nana: null, music: null });
+  const charImagesRef = useRef({});
+  const gameRef = useRef(createInitialMapState());
 
-  const gameRef = useRef({
-    player: { x: 100, y: 100, vx: 0, vy: 0, accel: 0.5, friction: 0.82, maxSpeed: 3.8, size: 64, facingLeft: false },
-    camera: { x: 0, y: 0 },
-    keys: { up: false, down: false, left: false, right: false },
-    mapWidth: 1200,
-    mapHeight: 900,
-    trees: [],
-    flowers: [],
-    grassTufts: [],
-    ponds: [],
-    notes: [],
-    coffeeShop: { x: 500, y: 320, width: 140, height: 100, doorX: 570, doorY: 420 },
-    zakyNpc: { x: 200, y: 180, size: 64 },
-    hunaNpc: { x: 200, y: 390, size: 64 },
-    miyaNpc: { x: 650, y: 500, size: 64 },
-    nanaNpc: { x: 850, y: 180, size: 64 },
-    musicSpot: { x: 350, y: 550, size: 88 }, 
-    partner: { x: 950, y: 750, size: 100 }
-  });
-
+  // Preload assets efficiently
   useEffect(() => {
     let loadedCount = 0;
-    const totalAssets = 7;
-    const checkAllLoaded = () => { if (++loadedCount === totalAssets) setAssetsLoaded(true); };
+    const entries = Object.entries(ASSET_SOURCES);
+    const totalAssets = entries.length;
 
-    const imgMakkunii = new Image(); imgMakkunii.src = makkuniiImgSrc; imgMakkunii.onload = checkAllLoaded;
-    const imgDang = new Image(); imgDang.src = dangImgSrc; imgDang.onload = checkAllLoaded;
-    const imgZaky = new Image(); imgZaky.src = zakyImgSrc; imgZaky.onload = checkAllLoaded;
-    const imgHuna = new Image(); imgHuna.src = hunaImgSrc; imgHuna.onload = checkAllLoaded;
-    const imgMiya = new Image(); imgMiya.src = miyaImgSrc; imgMiya.onload = checkAllLoaded;
-    const imgNana = new Image(); imgNana.src = nanaImgSrc; imgNana.onload = checkAllLoaded;
-    const imgMusic = new Image(); imgMusic.src = musicImgSrc; imgMusic.onload = checkAllLoaded;
+    const checkAllLoaded = () => {
+      loadedCount++;
+      if (loadedCount >= totalAssets) setAssetsLoaded(true);
+    };
 
-    charImagesRef.current = { makkunii: imgMakkunii, dang: imgDang, zaky: imgZaky, huna: imgHuna, miya: imgMiya, nana: imgNana, music: imgMusic };
+    const images = {};
+    entries.forEach(([key, src]) => {
+      const img = new Image();
+      img.src = src;
+      img.onload = checkAllLoaded;
+      img.onerror = checkAllLoaded; 
+      images[key] = img;
+    });
+    charImagesRef.current = images;
   }, []);
 
   const toggleAudio = () => {
@@ -86,70 +62,20 @@ export default function App() {
     setMuted(!muted);
   };
 
-  const initMap = () => {
-    const trees = [];
-    const flowers = [];
-    const grassTufts = [];
-    const notes = [];
-
-    for (let x = 0; x < 1200; x += 40) { trees.push({ x, y: 0 }, { x, y: 860 }); }
-    for (let y = 0; y < 900; y += 40) { trees.push({ x: 0, y }, { x: 1160, y }); }
-
-    const forestSpots = [{ x: 300, y: 200 }, { x: 340, y: 200 }, { x: 300, y: 240 }, { x: 750, y: 400 }, { x: 790, y: 400 }, { x: 240, y: 640 }, { x: 800, y: 200 }];
-    forestSpots.forEach(spot => trees.push(spot));
-
-    for (let i = 0; i < 55; i++) {
-      flowers.push({ x: Math.floor(Math.random() * 26 + 2) * 40 + Math.random() * 10, y: Math.floor(Math.random() * 19 + 2) * 40 + Math.random() * 10, color: i % 3 === 0 ? '#f43f5e' : i % 3 === 1 ? '#fde047' : '#a855f7' });
-    }
-
-    for (let i = 0; i < 90; i++) {
-      grassTufts.push({ x: Math.floor(Math.random() * 28 + 1) * 40, y: Math.floor(Math.random() * 21 + 1) * 40 });
-    }
-
-    const ponds = [{ x: 180, y: 380, width: 110, height: 75 }, { x: 850, y: 500, width: 110, height: 75 }];
-    const notePositions = [{ x: 250, y: 150 }, { x: 720, y: 260 }, { x: 850, y: 150 }, { x: 350, y: 700 }, { x: 750, y: 650 }];
-    notePositions.forEach(p => notes.push({ ...p, taken: false }));
-
-    gameRef.current = {
-      player: { x: 100, y: 100, vx: 0, vy: 0, accel: 0.5, friction: 0.82, maxSpeed: 3.8, size: 64, facingLeft: false },
-      camera: { x: 0, y: 0 },
-      keys: { up: false, down: false, left: false, right: false },
-      mapWidth: 1200, mapHeight: 900, trees, flowers, grassTufts, ponds, notes,
-      coffeeShop: { x: 500, y: 320, width: 140, height: 100, doorX: 570, doorY: 420 },
-      zakyNpc: { x: 200, y: 180, size: 64 },
-      hunaNpc: { x: 200, y: 390, size: 64 },
-      miyaNpc: { x: 650, y: 500, size: 64 },
-      nanaNpc: { x: 850, y: 180, size: 64 },
-      musicSpot: { x: 350, y: 550, size: 88 },
-      partner: { x: 1050, y: 750, size: 64 }
-    };
-  };
-
   const startGame = () => {
     audio.init();
-    initMap();
+    gameRef.current = createInitialMapState();
     setHearts(0);
-    setShowCoffeeModal(false);
-    setShowZakyModal(false);
-    setShowHunaModal(false);
-    setShowMiyaModal(false);
-    setShowNanaModal(false);
-    setShowMusicModal(false);
-    setShowPartnerMessageModal(false);
+    setActiveModal(null);
     setGameState('PLAYING');
   };
 
   const goToCharSelect = () => {
-    setShowCoffeeModal(false);
-    setShowZakyModal(false);
-    setShowHunaModal(false);
-    setShowMiyaModal(false);
-    setShowNanaModal(false);
-    setShowMusicModal(false);
-    setShowPartnerMessageModal(false);
+    setActiveModal(null);
     setGameState('START');
   };
 
+  // Setup Keyboard Control Listeners
   useEffect(() => {
     const handleKeyDown = (e) => {
       const k = gameRef.current.keys;
@@ -174,6 +100,7 @@ export default function App() {
     };
   }, []);
 
+  // Main Canvas Render & Physics Loop
   useEffect(() => {
     if (gameState !== 'PLAYING') return;
 
@@ -181,6 +108,7 @@ export default function App() {
     let stepTimer = 0;
     let frameCounter = 0;
     const canvas = canvasRef.current;
+    if (!canvas) return;
     const ctx = canvas.getContext('2d');
 
     const renderCharacter = (type, x, y, size, isMoving, facingLeft, animTick) => {
@@ -193,7 +121,8 @@ export default function App() {
       ctx.save();
       ctx.translate(x + size / 2, y + size / 2 + bounceY);
 
-      ctx.fillStyle = type === 'huna' ? 'rgba(30, 64, 175, 0.4)' : 'rgba(0, 0, 0, 0.3)';
+      // Soft character shadow
+      ctx.fillStyle = type === 'huna' ? 'rgba(76, 29, 149, 0.3)' : 'rgba(40, 15, 45, 0.35)';
       ctx.beginPath();
       ctx.ellipse(0, size / 2 - 2 - bounceY * 0.5, type === 'huna' ? size * 0.45 : size * 0.35, size * 0.15, 0, 0, Math.PI * 2);
       ctx.fill();
@@ -205,7 +134,7 @@ export default function App() {
         ctx.imageSmoothingEnabled = false;
         ctx.drawImage(img, -size / 2, -size / 2, size, size);
       } else {
-        ctx.fillStyle = type === 'makkunii' ? '#f43f5e' : type === 'dang' ? '#06b6d4' : type === 'huna' ? '#ec4899' : '#3b82f6';
+        ctx.fillStyle = type === 'makkunii' ? '#fb7185' : type === 'dang' ? '#38bdf8' : '#f472b6';
         ctx.fillRect(-size / 2, -size / 2, size, size);
       }
       ctx.restore();
@@ -231,15 +160,14 @@ export default function App() {
         const nextX = p.x + p.vx;
         const nextY = p.y + p.vy;
 
+        const pBox = { offsetX: 16, offsetY: 32, width: 32, height: 28 };
         let collideX = false, collideY = false;
+        
         g.trees.forEach(t => {
-          if (nextX < t.x + 36 && nextX + p.size > t.x && p.y < t.y + 36 && p.y + p.size > t.y) collideX = true;
-          if (p.x < t.x + 36 && p.x + p.size > t.x && nextY < t.y + 36 && nextY + p.size > t.y) collideY = true;
+          const tBox = { x: t.x + 10, y: t.y + 16, width: 20, height: 18 };
+          if (nextX + pBox.offsetX < tBox.x + tBox.width && nextX + pBox.offsetX + pBox.width > tBox.x && p.y + pBox.offsetY < tBox.y + tBox.height && p.y + pBox.offsetY + pBox.height > tBox.y) collideX = true;
+          if (p.x + pBox.offsetX < tBox.x + tBox.width && p.x + pBox.offsetX + pBox.width > tBox.x && nextY + pBox.offsetY < tBox.y + tBox.height && nextY + pBox.offsetY + pBox.height > tBox.y) collideY = true;
         });
-
-        const cs = g.coffeeShop;
-        if (nextX < cs.x + cs.width && nextX + p.size > cs.x && p.y < cs.y + cs.height - 15 && p.y + p.size > cs.y) collideX = true;
-        if (p.x < cs.x + cs.width && p.x + p.size > cs.x && nextY < cs.y + cs.height - 15 && nextY + p.size > cs.y) collideY = true;
 
         p.x = collideX ? p.x : Math.max(10, Math.min(g.mapWidth - 40, nextX));
         p.y = collideY ? p.y : Math.max(10, Math.min(g.mapHeight - 40, nextY));
@@ -247,61 +175,52 @@ export default function App() {
         const isMoving = Math.abs(p.vx) > 0.3 || Math.abs(p.vy) > 0.3;
         if (isMoving && ++stepTimer % 16 === 0) audio.step();
 
-        // Check Coffee Shop interaction
-        if (Math.abs(p.x - cs.doorX) < 45 && Math.abs(p.y - cs.doorY) < 45) {
-          audio.collect(); setShowCoffeeModal(true); p.y += 100;
+        const checkTrigger = (spot) => {
+          return Math.abs((p.x + p.size / 2) - (spot.x + spot.width / 2)) < 50 && 
+                 Math.abs((p.y + p.size / 2) - (spot.y + spot.height / 2)) < 50;
+        };
+
+        if (checkTrigger(g.coffeeShop)) {
+          audio.collect(); setActiveModal('coffee'); p.y += 65;
+        }
+        else if (checkTrigger(g.vapeShop)) {
+          audio.collect(); setActiveModal('vape'); p.y += 65;
+        }
+        else if (checkTrigger(g.musicSpot)) {
+          audio.collect(); setActiveModal('music'); p.y += 65;
+        }
+        else if (Math.abs((p.x + p.size / 2) - (g.zakyNpc.x + g.zakyNpc.size / 2)) < 35 && Math.abs((p.y + p.size / 2) - (g.zakyNpc.y + g.zakyNpc.size / 2)) < 35) {
+          audio.collect(); setActiveModal('zaky'); p.y += 65;
+        }
+        else if (Math.abs((p.x + p.size / 2) - (g.hunaNpc.x + g.hunaNpc.size / 2)) < 35 && Math.abs((p.y + p.size / 2) - (g.hunaNpc.y + g.hunaNpc.size / 2)) < 35) {
+          audio.collect(); setActiveModal('huna'); p.y += 65;
+        }
+        else if (Math.abs((p.x + p.size / 2) - (g.miyaNpc.x + g.miyaNpc.size / 2)) < 35 && Math.abs((p.y + p.size / 2) - (g.miyaNpc.y + g.miyaNpc.size / 2)) < 35) {
+          audio.collect(); setActiveModal('miya'); p.y += 65;
+        }
+        else if (Math.abs((p.x + p.size / 2) - (g.nanaNpc.x + g.nanaNpc.size / 2)) < 35 && Math.abs((p.y + p.size / 2) - (g.nanaNpc.y + g.nanaNpc.size / 2)) < 35) {
+          audio.collect(); setActiveModal('nana'); p.y = g.nanaNpc.y + 70;
         }
 
-        // Check Zaky NPC interaction
-        if (Math.abs(p.x - g.zakyNpc.x) < 30 && Math.abs(p.y - g.zakyNpc.y) < 20) {
-          audio.collect(); setShowZakyModal(true); p.y += 100;
-        }
-
-        // Check Huna NPC interaction
-        if (Math.abs(p.x - g.hunaNpc.x) < 30 && Math.abs(p.y - g.hunaNpc.y) < 20) {
-          audio.collect(); setShowHunaModal(true); p.y += 100;
-        }
-
-        // Check Miya NPC interaction
-        if (Math.abs(p.x - g.miyaNpc.x) < 30 && Math.abs(p.y - g.miyaNpc.y) < 20) {
-          audio.collect(); setShowMiyaModal(true); p.y += 100;
-        }
-
-        // Check Nana NPC interaction
-        if (Math.abs(p.x - g.nanaNpc.x) < 30 && Math.abs(p.y - g.nanaNpc.y) < 20) {
-          audio.collect(); 
-          setShowNanaModal(true); 
-          p.y = g.nanaNpc.y + 60;
-        }
-
-        // Check Music Spot interaction
-        if (Math.abs(p.x - g.musicSpot.x) < 40 && Math.abs(p.y - g.musicSpot.y) < 40) {
-          audio.collect(); setShowMusicModal(true); p.y += 100;
-        }
-
-        // Note collection loop
         g.notes.forEach(note => {
-          if (!note.taken && Math.abs(p.x - note.x) < 30 && Math.abs(p.y - note.y) < 30) {
+          if (!note.taken && Math.abs((p.x + p.size / 2) - (note.x + 12)) < 28 && Math.abs((p.y + p.size / 2) - (note.y + 12)) < 28) {
             note.taken = true; 
             audio.collect(); 
-            
             setHearts(prev => {
               const newTotal = prev + 1;
-              // Trigger personal message popup right when the 5th heart is collected
               if (newTotal >= 5) {
                 audio.winFanfare();
-                confetti({ particleCount: 130, spread: 80, origin: { y: 0.6 } });
-                setShowPartnerMessageModal(true);
+                confetti({ particleCount: 140, spread: 90, origin: { y: 0.6 } });
+                setActiveModal('partner');
               }
               return newTotal;
             });
           }
         });
 
-        // Trigger Partner / Victory condition
-        if (Math.abs(p.x - g.partner.x) < 50 && Math.abs(p.y - g.partner.y) < 50) {
+        if (Math.abs((p.x + p.size / 2) - (g.partner.x + g.partner.size / 2)) < 35 && Math.abs((p.y + p.size / 2) - (g.partner.y + g.partner.size / 2)) < 35) {
           audio.winFanfare();
-          confetti({ particleCount: 130, spread: 80, origin: { y: 0.6 } });
+          confetti({ particleCount: 150, spread: 100, origin: { y: 0.6 } });
           setGameState('VICTORY');
           return;
         }
@@ -312,54 +231,54 @@ export default function App() {
       g.camera.x = Math.max(0, Math.min(p.x - canvas.width / 2, g.mapWidth - canvas.width));
       g.camera.y = Math.max(0, Math.min(p.y - canvas.height / 2, g.mapHeight - canvas.height));
 
-      // --- RENDER FRAME ---
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.save();
       ctx.translate(-g.camera.x, -g.camera.y);
 
-      // 1. Base Terrain
-      ctx.fillStyle = '#2d5a27';
+      // Terrain
+      ctx.fillStyle = '#375a3e';
       ctx.fillRect(0, 0, g.mapWidth, g.mapHeight);
 
-      ctx.fillStyle = '#254e20';
+      ctx.fillStyle = '#2e4d35';
       for (let x = 0; x < g.mapWidth; x += 80) {
         for (let y = 0; y < g.mapHeight; y += 80) {
           if ((x + y) % 160 === 0) ctx.fillRect(x, y, 40, 40);
         }
       }
 
-      ctx.fillStyle = '#3a6f33';
+      ctx.fillStyle = '#4c7a54';
       g.grassTufts.forEach(gt => {
         ctx.fillRect(gt.x, gt.y, 3, 6);
         ctx.fillRect(gt.x + 4, gt.y - 2, 3, 8);
         ctx.fillRect(gt.x + 8, gt.y + 1, 3, 5);
       });
 
-      // 2. Animated Ponds
+      // Ponds
       g.ponds.forEach(pond => {
-        ctx.fillStyle = '#1e40af';
+        ctx.fillStyle = '#1e293b';
         ctx.beginPath();
         ctx.roundRect(pond.x, pond.y, pond.width, pond.height, 16);
         ctx.fill();
-        ctx.strokeStyle = '#3b82f6';
-        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#7dd3fc';
+        ctx.lineWidth = 2.5;
         ctx.stroke();
 
         const rippleOffset = Math.sin(frameCounter * 0.05) * 4;
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.strokeStyle = 'rgba(125, 211, 252, 0.4)';
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.arc(pond.x + pond.width / 2, pond.y + pond.height / 2, 12 + rippleOffset, 0, Math.PI * 2);
         ctx.stroke();
       });
 
-      // 3. Cobblestone Paths
+      // Paths
       const pathPoints = [
         { startX: 100, startY: 100, endX: 1050, endY: 100 },
         { startX: 1050, startY: 100, endX: 1050, endY: 750 },
         { startX: 100, startY: 100, endX: 100, endY: 750 },
         { startX: 100, startY: 750, endX: 1050, endY: 750 },
-        { startX: 570, startY: 100, endX: 570, endY: 420 }
+        { startX: 450, startY: 100, endX: 450, endY: 410 },
+        { startX: 750, startY: 100, endX: 750, endY: 410 }
       ];
 
       pathPoints.forEach(pSegment => {
@@ -373,58 +292,42 @@ export default function App() {
         for (let i = 0; i <= steps; i++) {
           const cx = pSegment.startX + stepX * i;
           const cy = pSegment.startY + stepY * i;
-          ctx.fillStyle = '#64748b';
+          ctx.fillStyle = '#8b7355';
           ctx.fillRect(cx, cy, 22, 22);
-          ctx.fillStyle = '#94a3b8';
+          ctx.fillStyle = '#a48764';
           ctx.fillRect(cx, cy, 22, 3);
-          ctx.fillStyle = '#334155';
+          ctx.fillStyle = '#6e5a42';
           ctx.fillRect(cx, cy + 19, 22, 3);
         }
       });
 
-      // 4. Coffee Shop Building
-      const cs = g.coffeeShop;
-      ctx.fillStyle = 'rgba(0,0,0,0.3)';
-      ctx.fillRect(cs.x + 8, cs.y + cs.height - 10, cs.width, 20);
+      // Shops & Music Building
+      const renderShop = (shop, imgRef) => {
+        const img = charImagesRef.current[imgRef];
+        const assetOffsetY = 35;
+        if (img && img.complete && img.naturalWidth !== 0) {
+          ctx.imageSmoothingEnabled = false;
+          ctx.drawImage(img, shop.x, shop.y - assetOffsetY, shop.width, shop.height + assetOffsetY);
+        } else {
+          ctx.fillStyle = imgRef === 'coffee' ? '#7c2d12' : '#334155';
+          ctx.fillRect(shop.x, shop.y, shop.width, shop.height);
+        }
+      };
 
-      ctx.fillStyle = '#7c2d12';
-      ctx.fillRect(cs.x, cs.y + 20, cs.width, cs.height - 20);
+      renderShop(g.coffeeShop, 'coffee');
+      renderShop(g.vapeShop, 'vape');
 
-      ctx.fillStyle = '#b45309';
-      ctx.fillRect(cs.x - 8, cs.y - 5, cs.width + 16, 25);
-      ctx.fillStyle = '#fef08a';
-      for (let rx = cs.x - 8; rx < cs.x + cs.width + 16; rx += 24) {
-        ctx.fillRect(rx, cs.y - 5, 12, 25);
+      const musicImg = charImagesRef.current.music;
+      const ms = g.musicSpot;
+      if (musicImg && musicImg.complete && musicImg.naturalWidth !== 0) {
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(musicImg, ms.x, ms.y - 35, ms.width, ms.height + 35);
+      } else {
+        ctx.fillStyle = '#059669';
+        ctx.fillRect(ms.x, ms.y, ms.width, ms.height);
       }
 
-      ctx.fillStyle = '#fef08a';
-      ctx.fillRect(cs.x + 15, cs.y + 35, 28, 28);
-      ctx.fillRect(cs.x + cs.width - 43, cs.y + 35, 28, 28);
-      ctx.fillStyle = '#78350f';
-      ctx.fillRect(cs.x + 28, cs.y + 35, 2, 28);
-      ctx.fillRect(cs.x + 15, cs.y + 48, 28, 2);
-      ctx.fillRect(cs.x + cs.width - 30, cs.y + 35, 2, 28);
-      ctx.fillRect(cs.x + cs.width - 43, cs.y + 48, 28, 2);
-
-      ctx.fillStyle = '#451a03';
-      ctx.fillRect(cs.x + 25, cs.y + 2, cs.width - 50, 18);
-      ctx.strokeStyle = '#fef08a';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(cs.x + 25, cs.y + 2, cs.width - 50, 18);
-      ctx.fillStyle = '#fef08a';
-      ctx.font = '7px "Press Start 2P"';
-      ctx.fillText('COFFEE', cs.x + 36, cs.y + 14);
-
-      ctx.fillStyle = '#451a03';
-      ctx.fillRect(cs.doorX - 16, cs.doorY - 30, 32, 30);
-      ctx.fillStyle = '#f59e0b';
-      ctx.fillRect(cs.doorX + 8, cs.doorY - 16, 4, 4);
-
-      const pulseMat = Math.sin(frameCounter * 0.1) * 0.2 + 0.8;
-      ctx.fillStyle = `rgba(245, 158, 11, ${pulseMat})`;
-      ctx.fillRect(cs.doorX - 18, cs.doorY - 2, 36, 8);
-
-      // 5. Flowers
+      // Flowers
       g.flowers.forEach(f => {
         ctx.fillStyle = f.color;
         ctx.fillRect(f.x - 2, f.y, 10, 6);
@@ -433,64 +336,74 @@ export default function App() {
         ctx.fillRect(f.x + 2, f.y + 1, 4, 4);
       });
 
-      // 6. Love Notes
+      // Collectible Hearts
       g.notes.forEach(n => {
         if (!n.taken) {
-          const floatY = Math.sin(frameCounter * 0.08) * 3;
-          const pulse = Math.sin(frameCounter * 0.12) * 1.5;
+          const floatY = Math.sin(frameCounter * 0.08) * 4;
+          const pulse = Math.sin(frameCounter * 0.12) * 2;
 
           ctx.save();
-          ctx.translate(n.x + 8, n.y + 8 + floatY);
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+          ctx.translate(n.x + 12, n.y + 12 + floatY);
+          
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
           ctx.beginPath();
-          ctx.ellipse(0, 12, 8, 3, 0, 0, Math.PI * 2);
+          ctx.ellipse(0, 14, 10, 4, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          const size = 14 + pulse;
+
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(-size / 2 - 1, -size / 2 - 1, size / 2 + 1, Math.PI, 0, false);
+          ctx.arc(size / 2 + 1, -size / 2 - 1, size / 2 + 1, Math.PI, 0, false);
+          ctx.lineTo(0, size / 2 + 3);
+          ctx.closePath();
           ctx.fill();
 
           ctx.fillStyle = '#f43f5e';
-          const size = 8 + pulse;
           ctx.beginPath();
           ctx.arc(-size / 2, -size / 2, size / 2, Math.PI, 0, false);
           ctx.arc(size / 2, -size / 2, size / 2, Math.PI, 0, false);
           ctx.lineTo(0, size / 2 + 2);
           ctx.closePath();
           ctx.fill();
+
           ctx.restore();
         }
       });
 
-      // 7. Trees
+      // Trees
       g.trees.forEach(t => {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+        ctx.fillStyle = 'rgba(40, 15, 45, 0.35)';
         ctx.beginPath();
         ctx.ellipse(t.x + 18, t.y + 32, 20, 8, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = '#78350f';
+        ctx.fillStyle = '#6b4423';
         ctx.fillRect(t.x + 12, t.y + 16, 12, 18);
-        ctx.fillStyle = '#451a03';
+        ctx.fillStyle = '#4a2e16';
         ctx.fillRect(t.x + 20, t.y + 16, 4, 18);
 
-        ctx.fillStyle = '#14532d';
+        ctx.fillStyle = '#1e4d30';
         ctx.beginPath();
         ctx.arc(t.x + 18, t.y + 10, 20, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = '#16a34a';
+        ctx.fillStyle = '#2a6b44';
         ctx.beginPath();
         ctx.arc(t.x + 14, t.y + 6, 13, 0, Math.PI * 2);
         ctx.fill();
       });
 
-      // 8. Render Music Spot Object on Map
-      const musicImg = charImagesRef.current.music;
-      if (musicImg && musicImg.complete && musicImg.naturalWidth !== 0) {
-        ctx.drawImage(musicImg, g.musicSpot.x, g.musicSpot.y, g.musicSpot.size, g.musicSpot.size);
-      } else {
-        ctx.fillStyle = '#10b981';
-        ctx.fillRect(g.musicSpot.x, g.musicSpot.y, g.musicSpot.size, g.musicSpot.size);
-      }
+      // Floating Particles
+      g.floatingParticles.forEach(fp => {
+        fp.y -= fp.speedY;
+        if (fp.y < 0) fp.y = g.mapHeight;
+        ctx.fillStyle = `rgba(251, 113, 133, ${fp.opacity})`;
+        ctx.fillRect(fp.x, fp.y, fp.size, fp.size);
+      });
 
-      // Render NPCs and Player
+      // Render Characters
       renderCharacter('zaky', g.zakyNpc.x, g.zakyNpc.y, g.zakyNpc.size, false, false, frameCounter);
       renderCharacter('huna', g.hunaNpc.x, g.hunaNpc.y, g.hunaNpc.size, false, false, frameCounter);
       renderCharacter('miya', g.miyaNpc.x, g.miyaNpc.y, g.miyaNpc.size, false, false, frameCounter);
@@ -512,7 +425,13 @@ export default function App() {
 
   return (
     <div className="game-container">
-      <HudBar muted={muted} toggleAudio={toggleAudio} gameState={gameState} goToCharSelect={goToCharSelect} hearts={hearts} />
+      <HudBar 
+        muted={muted} 
+        toggleAudio={toggleAudio} 
+        gameState={gameState} 
+        goToCharSelect={goToCharSelect} 
+        hearts={hearts} 
+      />
 
       <div className="canvas-viewport">
         <canvas ref={canvasRef} width={800} height={360} className="game-canvas" />
@@ -523,27 +442,28 @@ export default function App() {
             setPlayerChar={setPlayerChar} 
             startGame={startGame} 
             assetsLoaded={assetsLoaded} 
-            makkuniiImgSrc={makkuniiImgSrc} 
-            dangImgSrc={dangImgSrc} 
+            makkuniiImgSrc={ASSET_SOURCES.makkunii} 
+            dangImgSrc={ASSET_SOURCES.dang} 
           />
         )}
 
-        {showCoffeeModal && <CoffeeModal onClose={() => setShowCoffeeModal(false)} coffeePhotoImgSrc={coffeePhotoImgSrc} />}
-        {showZakyModal && <ZakyModal onClose={() => setShowZakyModal(false)} zakyImgSrc={zakyImgSrc} />}
-        {showHunaModal && <HunaModal onClose={() => setShowHunaModal(false)} hunaImgSrc={hunaImgSrc} />}
-        {showMiyaModal && <MiyaModal onClose={() => setShowMiyaModal(false)} miyaImgSrc={miyaImgSrc} />}
-        {showNanaModal && <NanaModal onClose={() => setShowNanaModal(false)} nanaImgSrc={nanaImgSrc} />}
-        {showMusicModal && <MusicModal onClose={() => setShowMusicModal(false)} musicImgSrc={musicImgSrc} />}
-
-        {/* Message modal pops up immediately upon collecting all 5 hearts */}
-        {showPartnerMessageModal && (
-          <PartnerMessageModal 
-            onClose={() => setShowPartnerMessageModal(false)} 
-          />
-        )}
+        {activeModal === 'coffee' && <CoffeeModal onClose={() => setActiveModal(null)} coffeePhotoImgSrc={coffeePhotoImgSrc} />}
+        {activeModal === 'vape' && <VapeModal onClose={() => setActiveModal(null)} />}
+        {activeModal === 'zaky' && <ZakyModal onClose={() => setActiveModal(null)} zakyImgSrc={ASSET_SOURCES.zaky} />}
+        {activeModal === 'huna' && <HunaModal onClose={() => setActiveModal(null)} hunaImgSrc={ASSET_SOURCES.huna} />}
+        {activeModal === 'miya' && <MiyaModal onClose={() => setActiveModal(null)} miyaImgSrc={ASSET_SOURCES.miya} />}
+        {activeModal === 'nana' && <NanaModal onClose={() => setActiveModal(null)} nanaImgSrc={ASSET_SOURCES.nana} />}
+        {activeModal === 'music' && <MusicModal onClose={() => setActiveModal(null)} musicImgSrc={ASSET_SOURCES.music} />}
+        {activeModal === 'partner' && <PartnerMessageModal onClose={() => setActiveModal(null)} />}
 
         {gameState === 'VICTORY' && (
-          <VictoryModal playerChar={playerChar} hearts={hearts} startGame={startGame} goToCharSelect={goToCharSelect} coverImgSrc={coverImgSrc} />
+          <VictoryModal 
+            playerChar={playerChar} 
+            hearts={hearts} 
+            startGame={startGame} 
+            goToCharSelect={goToCharSelect} 
+            coverImgSrc={coverImgSrc} 
+          />
         )}
       </div>
 
